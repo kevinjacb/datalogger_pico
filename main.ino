@@ -1,9 +1,9 @@
-#include "Wire.h"
+#include <Wire.h>
 #include "RTClib.h"
 #include <SPI.h>
 #include <SD.h>
 
-#define TRIG 13
+#define TRIG 12
 
 RTC_DS1307 rtc;
 File logFile;
@@ -18,8 +18,13 @@ void setup()
 {
     Wire.setSDA(0);
     Wire.setSCL(1);
+    Serial.begin(9600);
+
+    pinMode(11, OUTPUT); // test pin
+    digitalWrite(11, 1);
 
     pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(TRIG, INPUT_PULLDOWN);
 
     while (!rtc.begin())
     {
@@ -32,16 +37,7 @@ void setup()
     if (!rtc.isrunning())
     {
         Serial.println("Time needs to be set!");
-        Serial.println("Enter \"sys\" to set the system date and time, send anything to set date and time manually.");
-        while (!Serial.available())
-            ;
-        String data = Serial.readString();
-        if (data.equalsIgnoreCase("sys"))
-            rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-        else
-        {
-            userInput(data);
-        }
+        initRTC();
     }
     while (!SD.begin(4))
     {
@@ -64,29 +60,38 @@ void ISR()
 // {
 // }
 
-void userInput(String data)
+void initRTC()
 {
-    Serial.println("Enter the date and time, format:(YY MM DD Hour Minute Second) in numericals");
-    while (!Serial.available() > 0)
+    Serial.println("Enter \"sys\" to set the system date and time, send anything to set date and time manually.");
+    while (!Serial.available())
         ;
-    data = Serial.readString();
-    String dateNtime[6], field_val = "";
-    for (int i = 0, field = 0; i <= data.length(); i++)
+    String data = Serial.readString();
+    if (data.equalsIgnoreCase("sys"))
+        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    else
     {
-        if (data[i] != ' ' && i != data.length())
-            field_val += data[i];
-        else
+        Serial.println("Enter the date and time, format:(YY MM DD Hour Minute Second) in numericals");
+        while (!Serial.available() > 0)
+            ;
+        data = Serial.readString();
+        String dateNtime[6], field_val = "";
+        for (int i = 0, field = 0; i <= data.length(); i++)
         {
-            dateNtime[field++] = field_val;
-            field_val = "";
-            if (i == data.length() && field != 5)
+            if (data[i] != ' ' && i != data.length())
+                field_val += data[i];
+            else
             {
-                Serial.println("Incorrect format! Retry.");
-                userInput();
+                dateNtime[field++] = field_val;
+                field_val = "";
+                if (i == data.length() && field != 5)
+                {
+                    Serial.println("Incorrect format! Retry.");
+                    initRTC();
+                }
             }
         }
+        rtc.adjust(DateTime(dateNtime[0].toInt(), dateNtime[1].toInt(), dateNtime[2].toInt(), dateNtime[3].toInt(), dateNtime[4].toInt(), dateNtime[5].toInt()));
     }
-    rtc.adjust(DateTime(dateNtime[0].toInt(), dateNtime[1].toInt(), dateNtime[2].toInt(), dateNtime[3].toInt(), dateNtime[4].toInt(), dateNtime[5].toInt()));
 }
 
 void loop()
@@ -100,6 +105,7 @@ void loop()
         }
         else
         {
+            Serial.println("Started");
             logFile.println("STARTED -> DATE: " + String(now.day()) + " TIME: " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second()));
             logFile.close();
             hasWritten = true;
@@ -114,6 +120,7 @@ void loop()
         }
         else
         {
+            Serial.println("Stopped");
             logFile.println("STOPPED -> DATE: " + String(now.day()) + " TIME: " + String(now.hour()) + ":" + String(now.minute()) + ":" + String(now.second()));
             logFile.close();
             hasWritten = false;
